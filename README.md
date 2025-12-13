@@ -69,3 +69,30 @@ Banks typically use:
 - Gradient Boosting as an internal challenger model
 
 This balances transparency with performance.
+
+## Task 2 – Exploratory Data Analysis (EDA)
+
+### Objective
+The goal of this task was to explore the transaction dataset to understand its structure, identify data quality issues, uncover patterns, and generate insights that would guide feature engineering and modeling.
+
+### Dataset Overview
+- Total records: **95,662 transactions**
+- Total features: **16 columns**
+- Data types include numerical (`Amount`, `Value`, `FraudResult`, etc.) and categorical variables (`ProductCategory`, `ChannelId`, `ProviderId`, etc.)
+- No missing values were found in the dataset.
+
+### Key EDA Activities
+- Examined dataset structure, data types, and summary statistics
+- Analyzed distributions of numerical features to detect skewness and outliers
+- Explored categorical feature frequencies to understand dominant behaviors
+- Checked for missing values and data completeness
+- Identified potential data issues relevant for modeling
+
+### Key Insights
+1. **Transaction amounts are highly skewed**, with a few extreme high-value transactions and many low-value transactions, indicating the presence of outliers.
+2. **CountryCode shows no variance** (constant value), making it unsuitable as a predictive feature.
+3. **FraudResult is highly imbalanced**, with fraudulent transactions being extremely rare (~0.2%).
+4. **ProductCategory and ChannelId are dominated by a few categories**, suggesting strong behavioral patterns that can be useful for feature engineering.
+5. **No missing values** were detected, simplifying preprocessing and pipeline design.
+
+These findings inform the next steps, particularly feature engineering using customer-level aggregation and behavioral metrics such as RFM.
