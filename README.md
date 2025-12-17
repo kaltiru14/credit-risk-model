@@ -96,3 +96,104 @@ The goal of this task was to explore the transaction dataset to understand its s
 5. **No missing values** were detected, simplifying preprocessing and pipeline design.
 
 These findings inform the next steps, particularly feature engineering using customer-level aggregation and behavioral metrics such as RFM.
+
+# Task 3 – Feature Engineering
+## Objective
+
+The objective of this task is to build a robust, automated, and reproducible feature engineering pipeline that transforms raw transactional data into a model-ready dataset. This transformation is implemented using scikit-learn Pipelines, ensuring consistency, reusability, and compatibility with downstream modeling and deployment workflows.
+
+## Approach
+
+All feature engineering steps are implemented in src/data_processing.py using sklearn.pipeline.Pipeline and custom transformers. This ensures that the same transformations are applied consistently during training and inference.
+
+## Feature Engineering Steps
+**1. Aggregate Customer-Level Features**
+
+Transactional data is aggregated at the customer level (CustomerId) to capture behavioral patterns. The following features are created:
+- Total Transaction Amount: Sum of all transaction amounts per customer
+- Average Transaction Amount: Mean transaction amount per customer
+- Transaction Count: Total number of transactions per customer
+- Standard Deviation of Transaction Amounts: Variability of transaction values per customer
+
+These features help represent customer spending behavior and financial stability.
+
+**2. Time-Based Feature Extraction**
+
+From the transaction timestamp (TransactionStartTime), the following features are extracted:
+
+- Transaction Hour – Hour of the day
+- Transaction Day – Day of the month
+- Transaction Month – Month of the year
+- Transaction Year – Year of the transaction
+
+These features capture temporal spending patterns and customer activity cycles.
+
+**3. Categorical Feature Encoding**
+
+Categorical variables are converted into numerical format using One-Hot Encoding, which avoids introducing ordinal relationships between categories. The following fields are encoded:
+
+- CurrencyCode
+- CountryCode
+- ProviderId
+- ProductCategory
+- ChannelId
+- PricingStrategy
+
+Unseen categories are safely handled using handle_unknown="ignore" to ensure robustness during inference.
+
+**4. Missing Value Handling**
+
+Missing values are handled using imputation to preserve as much data as possible:
+
+- Numerical features: Imputed using the median
+- Categorical features: Imputed using the most frequent value
+
+This strategy reduces bias while maintaining data integrity.
+
+**5. Feature Scaling**
+
+All numerical features are standardized using StandardScaler, which transforms features to have:
+
+- Mean = 0
+- Standard deviation = 1
+
+Standardization improves model convergence and performance, especially for distance-based and linear models.
+
+**6. Weight of Evidence (WoE) and Information Value (IV)**
+
+Weight of Evidence (WoE) transformation is implemented to support credit-risk-specific modeling, particularly for interpretable models such as Logistic Regression scorecards.
+- WoE is implemented using the woe library
+- To avoid target leakage, WoE is applied only after the proxy target variable is created (Task 4)
+- The WoE dependency is handled as an optional import so that feature engineering and unit tests remain stable even if the library is not installed
+
+This design follows industry best practices for regulated financial modeling.
+
+## Pipeline Design
+
+The full feature engineering process is chained using a scikit-learn Pipeline and ColumnTransformer, combining:
+
+1. Time feature extraction
+2. Customer-level aggregation
+3. Missing value imputation
+4. Categorical encoding
+5. Feature scaling
+
+This ensures the pipeline is:
+- Reproducible
+- Maintainable
+- Production-ready
+- Testing and Validation
+
+Unit tests are implemented in tests/test_data_processing.py to validate:
+- Creation of time-based features
+- Creation of aggregate customer features
+- Successful execution of the full feature engineering pipeline
+
+All tests pass successfully, confirming the correctness and stability of the implementation.
+
+## Outcome
+
+At the end of Task 3, the raw transaction data is transformed into a clean, structured, and standardized dataset that is fully prepared for:
+- Proxy target variable engineering (Task 4)
+- Model training and evaluation (Task 5)
+- Deployment and inference (Task 6)
