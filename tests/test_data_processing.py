@@ -4,6 +4,7 @@ from src.data_processing import (
     process_data,
     TimeFeatureExtractor,
     AggregateCustomerFeatures,
+    create_target,  # Task 4
 )
 
 
@@ -30,6 +31,9 @@ def sample_dataframe():
     )
 
 
+# ========================
+# Task 3 Tests
+# ========================
 def test_time_features_created():
     df = sample_dataframe()
     transformer = TimeFeatureExtractor()
@@ -58,3 +62,21 @@ def test_process_data_output_shape():
 
     assert processed_df.shape[0] == df.shape[0]
     assert processed_df.shape[1] > 5
+
+
+# ========================
+# Task 4 Tests
+# ========================
+def test_create_target_adds_column():
+    df = sample_dataframe()
+    df_with_target, rfm = create_target(df)
+
+    # Check if 'is_high_risk' column exists
+    assert "is_high_risk" in df_with_target.columns
+
+    # Check that values are only 0 or 1
+    assert set(df_with_target["is_high_risk"].unique()).issubset({0, 1})
+
+    # Ensure each CustomerId has exactly one target value
+    target_per_customer = df_with_target.groupby("CustomerId")["is_high_risk"].nunique()
+    assert all(target_per_customer == 1)
