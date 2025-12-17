@@ -1,5 +1,6 @@
+fastapi
+uvicorn[standard]
 mlflow
-scikit-learn
-xgboost
-lightgbm
+pydantic
+flake8
 pytest
