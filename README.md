@@ -197,6 +197,34 @@ At the end of Task 3, the raw transaction data is transformed into a clean, stru
 - Proxy target variable engineering (Task 4)
 - Model training and evaluation (Task 5)
 - Deployment and inference (Task 6)
+# Task 4 – Proxy Target Variable Engineering
+
+## Objective
+Create a **proxy credit risk target** (`is_high_risk`) for supervised learning, as no explicit default label is available.
+
+## Approach
+
+1. **RFM Metrics**  
+   - **Recency**: Days since the last transaction (snapshot-based)  
+   - **Frequency**: Number of transactions per customer  
+   - **Monetary**: Total transaction amount per customer  
+
+2. **Customer Segmentation**  
+   - Use **KMeans clustering** to segment customers into 3 behavioral groups  
+   - Features are **scaled** for meaningful clustering  
+   - `random_state` set for reproducibility  
+
+3. **High-Risk Label Assignment**  
+   - The least engaged cluster (low frequency + low monetary) is labeled as **high risk**  
+   - Binary column `is_high_risk` is added: 1 = high-risk, 0 = others  
+
+4. **Integration**  
+   - The target column can be merged into the processed dataset for model training  
+
+## Outcome
+- A clean, reproducible **proxy target** ready for supervised machine learning  
+- Fully **tested** using unit tests to ensure correctness
+
 ## Task 5 – Model Training and Experiment Tracking
 
 ### Objective
@@ -229,3 +257,45 @@ Develop a structured and reproducible model training pipeline for credit risk pr
 ### How to Run
 ```bash
 python src/train.py
+```
+# Task 6 – Model Deployment with FastAPI
+## Overview
+
+Task 6 deploys the trained credit risk model (from Task 5) as a REST API using FastAPI. Users can send feature data and receive predicted risk probabilities.
+
+## Features
+- Loads the latest trained model from MLflow.
+- Provides a /predict endpoint for predictions.
+- Returns class probabilities and predicted class for each input.
+## Setup
+**1. Install dependencies (if not already installed):**
+```bash
+Install dependencies (if not already installed) 
+```
+**2. Start the API server:**
+```bash
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+```
+**3. Test the API:**
+```bash
+import requests
+
+data = {
+    "feature_1": 70,
+    "feature_2": 5000,
+    "feature_3": 0,
+    "feature_4": 1,
+    "feature_5": 50
+}
+
+response = requests.post("http://localhost:8000/predict", json=data)
+print(response.json())
+```
+## Notes
+- Ensure MLflow mlruns/ folder exists with the latest model.
+- Features should follow the same order and scale as used during training.
+- Output includes:
+  - class_0_prob: Probability of low-risk
+  - class_1_prob: Probability of high-risk
+  - predicted_class: Predicted class label (0 = low-risk, 1 = high-risk)
