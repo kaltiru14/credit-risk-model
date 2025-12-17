@@ -197,3 +197,31 @@ At the end of Task 3, the raw transaction data is transformed into a clean, stru
 - Proxy target variable engineering (Task 4)
 - Model training and evaluation (Task 5)
 - Deployment and inference (Task 6)
+
+# Task 4 – Proxy Target Variable Engineering
+
+## Objective
+Create a **proxy credit risk target** (`is_high_risk`) for supervised learning, as no explicit default label is available.
+
+## Approach
+
+1. **RFM Metrics**  
+   - **Recency**: Days since the last transaction (snapshot-based)  
+   - **Frequency**: Number of transactions per customer  
+   - **Monetary**: Total transaction amount per customer  
+
+2. **Customer Segmentation**  
+   - Use **KMeans clustering** to segment customers into 3 behavioral groups  
+   - Features are **scaled** for meaningful clustering  
+   - `random_state` set for reproducibility  
+
+3. **High-Risk Label Assignment**  
+   - The least engaged cluster (low frequency + low monetary) is labeled as **high risk**  
+   - Binary column `is_high_risk` is added: 1 = high-risk, 0 = others  
+
+4. **Integration**  
+   - The target column can be merged into the processed dataset for model training  
+
+## Outcome
+- A clean, reproducible **proxy target** ready for supervised machine learning  
+- Fully **tested** using unit tests to ensure correctness
