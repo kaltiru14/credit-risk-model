@@ -197,31 +197,35 @@ At the end of Task 3, the raw transaction data is transformed into a clean, stru
 - Proxy target variable engineering (Task 4)
 - Model training and evaluation (Task 5)
 - Deployment and inference (Task 6)
+## Task 5 – Model Training and Experiment Tracking
 
-# Task 4 – Proxy Target Variable Engineering
+### Objective
+Develop a structured and reproducible model training pipeline for credit risk prediction, including experiment tracking, hyperparameter tuning, and model evaluation.
 
-## Objective
-Create a **proxy credit risk target** (`is_high_risk`) for supervised learning, as no explicit default label is available.
+### What Was Done
+- Split the dataset into training and testing sets with a fixed `random_state` for reproducibility
+- Trained multiple machine learning models:
+  - Logistic Regression
+  - Random Forest
+- Performed hyperparameter tuning using `RandomizedSearchCV`
+- Evaluated models using the following metrics:
+  - Accuracy
+  - Precision
+  - Recall
+  - F1 Score
+  - ROC-AUC
+- Logged all experiments to **MLflow**, including:
+  - Model parameters
+  - Evaluation metrics
+  - Trained model artifacts
+- Compared model runs using the MLflow UI to identify the best-performing model
 
-## Approach
+### Tools & Libraries
+- Python (pandas, numpy)
+- scikit-learn
+- MLflow
+- pytest
 
-1. **RFM Metrics**  
-   - **Recency**: Days since the last transaction (snapshot-based)  
-   - **Frequency**: Number of transactions per customer  
-   - **Monetary**: Total transaction amount per customer  
-
-2. **Customer Segmentation**  
-   - Use **KMeans clustering** to segment customers into 3 behavioral groups  
-   - Features are **scaled** for meaningful clustering  
-   - `random_state` set for reproducibility  
-
-3. **High-Risk Label Assignment**  
-   - The least engaged cluster (low frequency + low monetary) is labeled as **high risk**  
-   - Binary column `is_high_risk` is added: 1 = high-risk, 0 = others  
-
-4. **Integration**  
-   - The target column can be merged into the processed dataset for model training  
-
-## Outcome
-- A clean, reproducible **proxy target** ready for supervised machine learning  
-- Fully **tested** using unit tests to ensure correctness
+### How to Run
+```bash
+python src/train.py
