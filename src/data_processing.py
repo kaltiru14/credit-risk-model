@@ -1,132 +1,206 @@
 import pandas as pd
 import numpy as np
-import logging
 
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+
+try:
+    from woe import WOE
+except ImportError:
+    WOE = None
 
 
-# -------------------------------------------------------------------
-# Logging configuration
-# -------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
+# =========================================================
+# 1. Custom Transformers
+# =========================================================
 
-# -------------------------------------------------------------------
-# Custom Transformer: RFM Feature Engineering
-# -------------------------------------------------------------------
-class RFMTransformer(BaseEstimator, TransformerMixin):
-    """
-    Create customer-level RFM (Recency, Frequency, Monetary) features.
-    """
+class TimeFeatureExtractor(BaseEstimator, TransformerMixin):
+    """Extract hour, day, month, year from TransactionStartTime"""
 
-    def __init__(self, reference_date=None):
-        self.reference_date = reference_date
+    def __init__(self, time_col="TransactionStartTime"):
+        self.time_col = time_col
 
     def fit(self, X, y=None):
         return self
 
     def transform(self, X):
-        required_cols = {"CustomerId", "Amount", "TransactionStartTime"}
-        if not required_cols.issubset(X.columns):
-            raise ValueError(
-                f"Missing required columns: {required_cols - set(X.columns)}"
-            )
+        X = X.copy()
+        X[self.time_col] = pd.to_datetime(X[self.time_col])
 
-        logger.info("Starting RFM feature engineering")
+        X["transaction_hour"] = X[self.time_col].dt.hour
+        X["transaction_day"] = X[self.time_col].dt.day
+        X["transaction_month"] = X[self.time_col].dt.month
+        X["transaction_year"] = X[self.time_col].dt.year
 
-        df = X.copy()
-        df["TransactionStartTime"] = pd.to_datetime(
-            df["TransactionStartTime"], errors="coerce"
-        )
+        return X
 
-        if self.reference_date is None:
-            reference_date = df["TransactionStartTime"].max()
-        else:
-            reference_date = pd.to_datetime(self.reference_date)
 
-        rfm = (
-            df.groupby("CustomerId")
+class AggregateCustomerFeatures(BaseEstimator, TransformerMixin):
+    """Create customer-level aggregate transaction features"""
+
+    def __init__(self, customer_id_col="CustomerId", amount_col="Amount"):
+        self.customer_id_col = customer_id_col
+        self.amount_col = amount_col
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+
+        agg = (
+            X.groupby(self.customer_id_col)[self.amount_col]
             .agg(
-                recency=("TransactionStartTime", lambda x: (reference_date - x.max()).days),
-                frequency=("TransactionStartTime", "count"),
-                monetary=("Amount", "sum"),
-                monetary_std=("Amount", "std"),
+                total_transaction_amount="sum",
+                avg_transaction_amount="mean",
+                transaction_count="count",
+                std_transaction_amount="std",
             )
-            .fillna(0)
             .reset_index()
         )
 
-        logger.info("RFM feature engineering completed")
-        return rfm
+        X = X.merge(agg, on=self.customer_id_col, how="left")
+        X["std_transaction_amount"] = X["std_transaction_amount"].fillna(0)
+
+        return X
 
 
-# -------------------------------------------------------------------
-# Proxy Default Label Creation
-# -------------------------------------------------------------------
-def create_proxy_default(df: pd.DataFrame) -> pd.DataFrame:
+class WoETransformer(BaseEstimator, TransformerMixin):
     """
-    Create a proxy default label based on RFM behavior.
-    High recency, low frequency, and low monetary value are treated as higher risk.
-    """
-
-    required_cols = {"recency", "frequency", "monetary"}
-    if not required_cols.issubset(df.columns):
-        raise ValueError("RFM features must exist before creating proxy default")
-
-    logger.info("Creating proxy default label")
-
-    df = df.copy()
-
-    recency_thresh = df["recency"].quantile(0.75)
-    freq_thresh = df["frequency"].quantile(0.25)
-    monetary_thresh = df["monetary"].quantile(0.25)
-
-    df["default_proxy"] = np.where(
-        (df["recency"] >= recency_thresh)
-        & (df["frequency"] <= freq_thresh)
-        & (df["monetary"] <= monetary_thresh),
-        1,
-        0,
-    )
-
-    logger.info("Proxy default label created")
-    return df
-
-
-# -------------------------------------------------------------------
-# Full Preprocessing Pipeline
-# -------------------------------------------------------------------
-def build_preprocessing_pipeline(categorical_cols, numerical_cols):
-    """
-    Build a preprocessing pipeline using sklearn.
+    Weight of Evidence transformer
+    NOTE: Must be applied ONLY after target variable exists
     """
 
-    logger.info("Building preprocessing pipeline")
+    def __init__(self, categorical_features):
+        self.categorical_features = categorical_features
+        self.encoders = {}
 
-    numeric_transformer = Pipeline(
+    def fit(self, X, y):
+        for col in self.categorical_features:
+            woe = WOE()
+            woe.fit(X[col], y)
+            self.encoders[col] = woe
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        for col, woe in self.encoders.items():
+            X[col] = woe.transform(X[col])
+        return X
+
+
+# =========================================================
+# 2. Pipeline Builder
+# =========================================================
+
+def build_feature_pipeline(numerical_features, categorical_features):
+    """
+    Feature engineering pipeline WITHOUT WoE
+    (used before target creation)
+    """
+
+    numeric_pipeline = Pipeline(
         steps=[
-            ("scaler", StandardScaler())
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
         ]
     )
 
-    categorical_transformer = Pipeline(
+    categorical_pipeline = Pipeline(
         steps=[
-            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("encoder", OneHotEncoder(drop="first", handle_unknown="ignore")),
         ]
     )
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", numeric_transformer, numerical_cols),
-            ("cat", categorical_transformer, categorical_cols),
+            ("num", numeric_pipeline, numerical_features),
+            ("cat", categorical_pipeline, categorical_features),
         ]
     )
 
-    return preprocessor
+    pipeline = Pipeline(
+        steps=[
+            ("time_features", TimeFeatureExtractor()),
+            ("aggregate_features", AggregateCustomerFeatures()),
+            ("preprocessor", preprocessor),
+        ]
+    )
+
+    return pipeline
+
+
+# =========================================================
+# 3. Public Processing Functions
+# =========================================================
+
+def process_data(df):
+    """
+    Feature engineering BEFORE target creation
+    (used for Task 3)
+    """
+
+    numerical_features = [
+        "Amount",
+        "Value",
+        "transaction_hour",
+        "transaction_day",
+        "transaction_month",
+        "transaction_year",
+        "total_transaction_amount",
+        "avg_transaction_amount",
+        "transaction_count",
+        "std_transaction_amount",
+    ]
+
+    categorical_features = [
+        "CurrencyCode",
+        "CountryCode",
+        "ProviderId",
+        "ProductCategory",
+        "ChannelId",
+        "PricingStrategy",
+    ]
+
+    pipeline = build_feature_pipeline(
+        numerical_features=numerical_features,
+        categorical_features=categorical_features,
+    )
+
+    processed_array = pipeline.fit_transform(df)
+
+    feature_names = (
+        numerical_features
+        + list(
+            pipeline.named_steps["preprocessor"]
+            .named_transformers_["cat"]
+            .named_steps["encoder"]
+            .get_feature_names_out(categorical_features)
+        )
+    )
+
+    processed_df = pd.DataFrame(processed_array, columns=feature_names)
+
+    return processed_df
+
+
+def apply_woe(df, target_col, categorical_features):
+    """
+    Apply WoE transformation AFTER target variable exists
+    (used in Task 4+)
+    """
+
+    X = df.drop(columns=[target_col])
+    y = df[target_col]
+
+    woe_transformer = WoETransformer(categorical_features)
+    X_woe = woe_transformer.fit_transform(X, y)
+
+    X_woe[target_col] = y.values
+
+    return X_woe

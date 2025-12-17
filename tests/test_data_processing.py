@@ -1,74 +1,60 @@
 import pandas as pd
-import pytest
 
-from src.data_processing import RFMTransformer, create_proxy_default
-
-
-# -------------------------------------------------------------------
-# Test RFM Feature Engineering
-# -------------------------------------------------------------------
-def test_rfm_transformer_creates_expected_columns():
-    df = pd.DataFrame({
-        "CustomerId": ["C1", "C1", "C2"],
-        "Amount": [100, 200, 50],
-        "TransactionStartTime": [
-            "2024-01-01",
-            "2024-01-05",
-            "2024-01-03",
-        ],
-    })
-
-    transformer = RFMTransformer(reference_date="2024-01-10")
-    rfm = transformer.fit_transform(df)
-
-    expected_cols = {
-        "CustomerId", "recency", "frequency", "monetary", "monetary_std"
-    }
-
-    assert expected_cols.issubset(set(rfm.columns))
-    assert len(rfm) == 2
+from src.data_processing import (
+    process_data,
+    TimeFeatureExtractor,
+    AggregateCustomerFeatures,
+)
 
 
-def test_rfm_frequency_correct():
-    df = pd.DataFrame({
-        "CustomerId": ["C1", "C1", "C2"],
-        "Amount": [100, 200, 50],
-        "TransactionStartTime": [
-            "2024-01-01",
-            "2024-01-05",
-            "2024-01-03",
-        ],
-    })
-
-    transformer = RFMTransformer(reference_date="2024-01-10")
-    rfm = transformer.fit_transform(df)
-
-    freq_c1 = rfm.loc[rfm["CustomerId"] == "C1", "frequency"].iloc[0]
-    assert freq_c1 == 2
-
-
-# -------------------------------------------------------------------
-# Test Proxy Default Creation
-# -------------------------------------------------------------------
-def test_proxy_default_creation():
-    rfm_df = pd.DataFrame({
-        "CustomerId": ["C1", "C2", "C3"],
-        "recency": [30, 5, 40],
-        "frequency": [1, 10, 1],
-        "monetary": [100, 5000, 50],
-    })
-
-    result = create_proxy_default(rfm_df)
-
-    assert "default_proxy" in result.columns
-    assert result["default_proxy"].isin([0, 1]).all()
+def sample_dataframe():
+    return pd.DataFrame(
+        {
+            "TransactionId": [1, 2, 3, 4],
+            "CustomerId": ["C1", "C1", "C2", "C3"],
+            "TransactionStartTime": [
+                "2024-01-01 10:00:00",
+                "2024-01-02 12:00:00",
+                "2024-01-03 14:00:00",
+                "2024-01-04 16:00:00",
+            ],
+            "Amount": [100, 200, 50, 300],
+            "Value": [100, 200, 50, 300],
+            "CurrencyCode": ["UGX", "UGX", "UGX", "UGX"],
+            "CountryCode": [256, 256, 256, 256],
+            "ProviderId": ["P1", "P1", "P2", "P3"],
+            "ProductCategory": ["Cat1", "Cat1", "Cat2", "Cat3"],
+            "ChannelId": ["Web", "Android", "Web", "IOS"],
+            "PricingStrategy": [1, 1, 2, 2],
+        }
+    )
 
 
-def test_proxy_default_missing_columns_raises_error():
-    bad_df = pd.DataFrame({
-        "recency": [10, 20],
-        "frequency": [1, 2],
-    })
+def test_time_features_created():
+    df = sample_dataframe()
+    transformer = TimeFeatureExtractor()
+    result = transformer.fit_transform(df)
 
-    with pytest.raises(ValueError):
-        create_proxy_default(bad_df)
+    assert "transaction_hour" in result.columns
+    assert "transaction_day" in result.columns
+    assert "transaction_month" in result.columns
+    assert "transaction_year" in result.columns
+
+
+def test_aggregate_features_created():
+    df = sample_dataframe()
+    transformer = AggregateCustomerFeatures()
+    result = transformer.fit_transform(df)
+
+    assert "total_transaction_amount" in result.columns
+    assert "avg_transaction_amount" in result.columns
+    assert "transaction_count" in result.columns
+    assert "std_transaction_amount" in result.columns
+
+
+def test_process_data_output_shape():
+    df = sample_dataframe()
+    processed_df = process_data(df)
+
+    assert processed_df.shape[0] == df.shape[0]
+    assert processed_df.shape[1] > 5
